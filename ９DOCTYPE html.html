@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOOM in HTML</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            background: #000;
+        }
+        #health-bar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 200px;
+            height: 20px;
+            background: red;
+            border: 2px solid white;
+        }
+        #health-bar-inner {
+            height: 100%;
+            background: green;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="health-bar">
+        <div id="health-bar-inner"></div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const healthBar = document.getElementById('health-bar-inner');
+        
+        // Resize canvas to fit the window
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 10,
+            speed: 3,
+            color: 'white',
+            direction: 'up', // up, down, left, right
+            health: 100 // Player health
+        };
+
+        const bullets = [];
+        const bulletSpeed = 5;
+
+        const enemies = [];
+        const enemySize = 15;
+        const enemyColor = 'green';
+        const enemySpawnInterval = 2000; // Spawn an enemy every 2 seconds
+        const enemySpeed = 2;
+        const enemyBullets = [];
+        const enemyBulletSpeed = 3;
+
+        const keys = {};
+
+        // Handle key presses
+        window.addEventListener('keydown', (e) => keys[e.key] = true);
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        function spawnEnemy() {
+            const enemy = {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: enemySize,
+                color: enemyColor
+            };
+            enemies.push(enemy);
+        }
+
+        function shoot() {
+            const bullet = {
+                x: player.x,
+                y: player.y,
+                size: 5,
+                direction: player.direction
+            };
+            bullets.push(bullet);
+        }
+
+        function enemyShoot(enemy) {
+            const bullet = {
+                x: enemy.x,
+                y: enemy.y,
+                size: 5,
+                directionX: (player.x - enemy.x) / Math.hypot(player.x - enemy.x, player.y - enemy.y),
+                directionY: (player.y - enemy.y) / Math.hypot(player.x - enemy.x, player.y - enemy.y)
+            };
+            enemyBullets.push(bullet);
+        }
+
+        function update() {
+            // Movement
+            if (keys['ArrowUp'] || keys['w']) {
+                player.y -= player.speed;
+                player.direction = 'up';
+            }
+            if (keys['ArrowDown'] || keys['s']) {
+                player.y += player.speed;
+                player.direction = 'down';
+            }
+            if (keys['ArrowLeft'] || keys['a']) {
+                player.x -= player.speed;
+                player.direction = 'left';
+            }
+            if (keys['ArrowRight'] || keys['d']) {
+                player.x += player.speed;
+                player.direction = 'right';
+            }
+
+            // Shoot bullet on spacebar
+            if (keys[' ']) {
+                shoot();
+                keys[' '] = false; // Prevent continuous shooting
+            }
+
+            // Prevent player from going out of bounds
+            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+
+            // Update bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                if (bullet.direction === 'up') bullet.y -= bulletSpeed;
+                if (bullet.direction === 'down') bullet.y += bulletSpeed;
+                if (bullet.direction === 'left') bullet.x -= bulletSpeed;
+                if (bullet.direction === 'right') bullet.x += bulletSpeed;
+
+                // Remove bullets that go out of bounds
+                if (
+                    bullet.x < 0 || bullet.x > canvas.width ||
+                    bullet.y < 0 || bullet.y > canvas.height
+                ) {
+                    bullets.splice(i, 1);
+                }
+            }
+
+            // Update enemy bullets
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                bullet.x += bullet.directionX * enemyBulletSpeed;
+                bullet.y += bullet.directionY * enemyBulletSpeed;
+
+                // Check collision with player
+                const dist = Math.hypot(player.x - bullet.x, player.y - bullet.y);
+                if (dist < player.size + bullet.size) {
+                    player.health -= 10;
+                    enemyBullets.splice(i, 1);
+                    if (player.health <= 0) {
+                        alert('Game Over!');
+                        window.location.reload();
+                    }
+                }
+
+                // Remove bullets that go out of bounds
+                if (
+                    bullet.x < 0 || bullet.x > canvas.width ||
+                    bullet.y < 0 || bullet.y > canvas.height
+                ) {
+                    enemyBullets.splice(i, 1);
+                }
+            }
+
+            // Update enemies
+            enemies.forEach((enemy, index) => {
+                const directionX = (player.x - enemy.x) / Math.hypot(player.x - enemy.x, player.y - enemy.y);
+                const directionY = (player.y - enemy.y) / Math.hypot(player.x - enemy.x, player.y - enemy.y);
+                enemy.x += directionX * enemySpeed;
+                enemy.y += directionY * enemySpeed;
+
+                // Enemy shooting
+                if (Math.random() < 0.01) {
+                    enemyShoot(enemy);
+                }
+            });
+
+            // Check collisions between bullets and enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    const bullet = bullets[j];
+                    const dist = Math.hypot(enemy.x - bullet.x, enemy.y - bullet.y);
+                    if (dist < enemy.size + bullet.size) {
+                        enemies.splice(i, 1); // Remove enemy
+                        bullets.splice(j, 1); // Remove bullet
+                        break;
+                    }
+                }
+            }
+
+            // Update health bar
+            healthBar.style.width = player.health + '%';
+        }
+
+        function draw() {
+            // Clear the canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the player
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw player's direction
+            ctx.strokeStyle = 'yellow';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            if (player.direction === 'up') {
+                ctx.moveTo(player.x, player.y - player.size);
+                ctx.lineTo(player.x, player.y - player.size * 2);
+            } else if (player.direction === 'down') {
+                ctx.moveTo(player.x, player.y + player.size);
+                ctx.lineTo(player.x, player.y + player.size * 2);
+            } else if (player.direction === 'left') {
+                ctx.moveTo(player.x - player.size, player.y);
+                ctx.lineTo(player.x - player.size * 2, player.y);
+            } else if (player.direction === 'right') {
+                ctx.moveTo(player.x + player.size, player.y);
+                ctx.lineTo(player.x + player.size * 2, player.y);
+            }
+            ctx.stroke();
+
+            // Draw bullets
+            ctx.fillStyle = 'red';
+            bullets.forEach(bullet => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw enemies
+            ctx.fillStyle = enemyColor;
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw enemy bullets
+            ctx.fillStyle = 'orange';
+            enemyBullets.forEach(bullet => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        setInterval(spawnEnemy, enemySpawnInterval);
+        gameLoop();
+    </script>
+</body>
+</html>
